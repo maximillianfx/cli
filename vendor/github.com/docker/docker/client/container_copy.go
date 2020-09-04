@@ -16,11 +16,11 @@ import (
 )
 
 var (
-	ticker = time.NewTicker(100 * time.Millisecond)
+	ticker = time.NewTicker(400 * time.Millisecond)
 	nontick = make(chan bool)
 	concludeCpChannel = make(chan bool)
-	character string = "-"
 	counter int = 0
+	spinCharacters = []string{"-", "\\", "|", "/"}
 )
 
 // ContainerStatPath returns Stat information about a path inside the container filesystem.
@@ -122,35 +122,19 @@ func printAnimCopy() {
 
 func spinnerCopyAnim() {
 	fmt.Print("\033[s")
-	fmt.Printf("%s Copying...", character)
+	fmt.Printf("%s Copying...", spinCharacters[0])
 	for {
 		select {
 		case <- nontick:
 			return
 		case <- ticker.C:
 			counter += 1
-			switch {
-			case counter == 1:
-				fmt.Print("\033[u\033[K")
-				character = "\\"
-				fmt.Printf("%s Copying...", character)
-			case counter == 2:
-				fmt.Print("\033[u\033[K")
-				character = "|"
-				fmt.Printf("%s Copying...", character)
-			case counter == 3:
-				fmt.Print("\033[u\033[K")
-				character = "/"
-				fmt.Printf("%s Copying...", character)
-			case counter == 4:
-				fmt.Print("\033[u\033[K")
-				character = "-"
-				fmt.Printf("%s Copying...", character)
-				counter = 0
-			default:
-				character = "-"
-				counter = 0
+			fmt.Print("\033[u\033[K")
+			fmt.Printf("%s Copying...", spinCharacters[counter])
+			if counter == 3 {
+				counter = -1
 			}
+
 		case <- concludeCpChannel:
 			ticker.Stop()
 			fmt.Print("\033[u\033[K")
