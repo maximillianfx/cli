@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"time"
 	"io"
 	"net/http"
 	"net/url"
@@ -12,6 +13,14 @@ import (
 	"strings"
 
 	"github.com/docker/docker/api/types"
+)
+
+var (
+	ticker = time.NewTicker(100 * time.Millisecond)
+	nontick = make(chan bool)
+	concludeCpChannel = make(chan bool)
+	character string = "-"
+	counter int = 0
 )
 
 // ContainerStatPath returns Stat information about a path inside the container filesystem.
@@ -44,6 +53,8 @@ func (cli *Client) CopyToContainer(ctx context.Context, containerID, dstPath str
 
 	apiPath := "/containers/" + containerID + "/archive"
 
+	printAnimCopy()
+
 	response, err := cli.putRaw(ctx, apiPath, query, content, nil)
 	defer ensureReaderClosed(response)
 	if err != nil {
@@ -54,6 +65,9 @@ func (cli *Client) CopyToContainer(ctx context.Context, containerID, dstPath str
 	if response.statusCode != http.StatusOK {
 		return fmt.Errorf("unexpected status code from daemon: %d", response.statusCode)
 	}
+
+	concludeCpChannel <- true
+	time.Sleep(300 * time.Millisecond)
 
 	return nil
 }
@@ -100,4 +114,48 @@ func getContainerPathStatFromHeader(header http.Header) (types.ContainerPathStat
 	}
 
 	return stat, err
+}
+
+func printAnimCopy() {
+	go spinnerCopyAnim()
+}
+
+func spinnerCopyAnim() {
+	fmt.Print("\033[s")
+	fmt.Printf("%s Copying...", character)
+	for {
+		select {
+		case <- nontick:
+			return
+		case <- ticker.C:
+			counter += 1
+			switch {
+			case counter == 1:
+				fmt.Print("\033[u\033[K")
+				character = "\\"
+				fmt.Printf("%s Copying...", character)
+			case counter == 2:
+				fmt.Print("\033[u\033[K")
+				character = "|"
+				fmt.Printf("%s Copying...", character)
+			case counter == 3:
+				fmt.Print("\033[u\033[K")
+				character = "/"
+				fmt.Printf("%s Copying...", character)
+			case counter == 4:
+				fmt.Print("\033[u\033[K")
+				character = "-"
+				fmt.Printf("%s Copying...", character)
+				counter = 0
+			default:
+				character = "-"
+				counter = 0
+			}
+		case <- concludeCpChannel:
+			ticker.Stop()
+			fmt.Print("\033[u\033[K")
+			fmt.Print("\u2713 Copying...")
+			fmt.Println()
+		}
+    }
 }
