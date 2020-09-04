@@ -6,7 +6,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-
+	"time"
+	"fmt"
 	"github.com/docker/cli/cli"
 	"github.com/docker/cli/cli/command"
 	"github.com/docker/docker/api/types"
@@ -38,6 +39,14 @@ type cpConfig struct {
 	destPath   string
 	container  string
 }
+
+var (
+	ticker = time.NewTicker(400 * time.Millisecond)
+	nontick = make(chan bool)
+	concludeCpChannel = make(chan bool)
+	counter int = 0
+	spinCharacters = []string{"-", "\\", "|", "/"}
+)
 
 // NewCopyCommand creates a new `docker cp` command
 func NewCopyCommand(dockerCli command.Cli) *cobra.Command {
@@ -176,7 +185,18 @@ func copyFromContainer(ctx context.Context, dockerCli command.Cli, copyConfig cp
 		_, srcBase := archive.SplitPathDirEntry(srcInfo.Path)
 		preArchive = archive.RebaseArchiveEntries(content, srcBase, srcInfo.RebaseName)
 	}
-	return archive.CopyTo(preArchive, srcInfo, dstPath)
+
+	go spinnerCopyAnim()
+
+	res := archive.CopyTo(preArchive, srcInfo, dstPath)
+	if res != nil {
+		return err
+	}
+
+	concludeCpChannel <- true
+	time.Sleep(300 * time.Millisecond)
+	
+	return res
 }
 
 // In order to get the copy behavior right, we need to know information
@@ -278,7 +298,18 @@ func copyToContainer(ctx context.Context, dockerCli command.Cli, copyConfig cpCo
 		AllowOverwriteDirWithFile: false,
 		CopyUIDGID:                copyConfig.copyUIDGID,
 	}
-	return client.CopyToContainer(ctx, copyConfig.container, resolvedDstPath, content, options)
+
+	go spinnerCopyAnim()
+	
+	res := client.CopyToContainer(ctx, copyConfig.container, resolvedDstPath, content, options)
+	if res != nil {
+		return err
+	}
+
+	concludeCpChannel <- true
+	time.Sleep(300 * time.Millisecond)
+	
+	return res
 }
 
 // We use `:` as a delimiter between CONTAINER and PATH, but `:` could also be
@@ -310,4 +341,28 @@ func splitCpArg(arg string) (container, path string) {
 	}
 
 	return parts[0], parts[1]
+}
+
+func spinnerCopyAnim() {
+	fmt.Print("\033[s")
+	fmt.Printf("%s Copying...", spinCharacters[0])
+	for {
+		select {
+		case <- nontick:
+			return
+		case <- ticker.C:
+			counter += 1
+			fmt.Print("\033[u\033[K")
+			fmt.Printf("%s Copying...", spinCharacters[counter])
+			if counter == 3 {
+				counter = -1
+			}
+
+		case <- concludeCpChannel:
+			ticker.Stop()
+			fmt.Print("\033[u\033[K")
+			fmt.Print("\u2713 Copying...")
+			fmt.Println()
+		}
+    }
 }
