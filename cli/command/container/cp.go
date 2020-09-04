@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
-	
+
 	"github.com/docker/cli/cli"
 	"github.com/docker/cli/cli/command"
 	"github.com/docker/docker/api/types"
@@ -42,11 +42,11 @@ type cpConfig struct {
 }
 
 var (
-	ticker = time.NewTicker(400 * time.Millisecond)
-	nontick = make(chan bool)
-	concludeCpChannel = make(chan bool)
-	counter int = 0
-	spinCharacters = []string{"-", "\\", "|", "/"}
+	ticker                = time.NewTicker(400 * time.Millisecond)
+	nontick               = make(chan bool)
+	concludeCpChannel     = make(chan bool)
+	counter           int = 0
+	spinCharacters        = []string{"-", "\\", "|", "/"}
 )
 
 // NewCopyCommand creates a new `docker cp` command
@@ -196,7 +196,7 @@ func copyFromContainer(ctx context.Context, dockerCli command.Cli, copyConfig cp
 
 	concludeCpChannel <- true
 	time.Sleep(300 * time.Millisecond)
-	
+
 	return res
 }
 
@@ -301,7 +301,7 @@ func copyToContainer(ctx context.Context, dockerCli command.Cli, copyConfig cpCo
 	}
 
 	go spinnerCopyAnim()
-	
+
 	res := client.CopyToContainer(ctx, copyConfig.container, resolvedDstPath, content, options)
 	if res != nil {
 		return err
@@ -309,7 +309,7 @@ func copyToContainer(ctx context.Context, dockerCli command.Cli, copyConfig cpCo
 
 	concludeCpChannel <- true
 	time.Sleep(300 * time.Millisecond)
-	
+
 	return res
 }
 
@@ -349,9 +349,9 @@ func spinnerCopyAnim() {
 	fmt.Printf("%s Copying...", spinCharacters[0])
 	for {
 		select {
-		case <- nontick:
+		case <-nontick:
 			return
-		case <- ticker.C:
+		case <-ticker.C:
 			counter++
 			fmt.Print("\033[u\033[K")
 			fmt.Printf("%s Copying...", spinCharacters[counter])
@@ -359,11 +359,11 @@ func spinnerCopyAnim() {
 				counter = -1
 			}
 
-		case <- concludeCpChannel:
+		case <-concludeCpChannel:
 			ticker.Stop()
 			fmt.Print("\033[u\033[K")
 			fmt.Print("\u2713 Copying...")
 			fmt.Println()
 		}
-    }
+	}
 }
