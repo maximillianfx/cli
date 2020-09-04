@@ -351,7 +351,7 @@ func spinnerCopyAnim() {
 		case <- nontick:
 			return
 		case <- ticker.C:
-			counter += 1
+			counter++
 			fmt.Print("\033[u\033[K")
 			fmt.Printf("%s Copying...", spinCharacters[counter])
 			if counter == 3 {
