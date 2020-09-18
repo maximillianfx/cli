@@ -42,6 +42,7 @@ type cpConfig struct {
 
 var (
 	copySize int64 = 0
+	IsStdin bool = false
 )
 
 // NewCopyCommand creates a new `docker cp` command
@@ -251,6 +252,7 @@ func copyToContainer(ctx context.Context, dockerCli command.Cli, copyConfig cpCo
 	if srcPath == "-" {
 		content = os.Stdin
 		resolvedDstPath = dstInfo.Path
+		IsStdin = true
 		if !dstInfo.IsDir {
 			return errors.Errorf("destination \"%s:%s\" must be a directory", copyConfig.container, dstPath)
 		}
@@ -304,11 +306,10 @@ func copyToContainer(ctx context.Context, dockerCli command.Cli, copyConfig cpCo
 	}
 
 	res := client.CopyToContainer(ctx, copyConfig.container, resolvedDstPath, content, options)
-	if res != nil {
-		return err
+	
+	if !IsStdin {
+		fmt.Println(bytefmt.ByteSize(uint64(copySize))," copied")
 	}
-
-	fmt.Println(bytefmt.ByteSize(uint64(copySize))," copied")
 
 	return res
 }
