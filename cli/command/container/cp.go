@@ -43,6 +43,7 @@ type cpConfig struct {
 var (
 	copySize int64 = 0
 	IsStdin bool = false
+	pathDst string = ""
 )
 
 // NewCopyCommand creates a new `docker cp` command
@@ -183,14 +184,23 @@ func copyFromContainer(ctx context.Context, dockerCli command.Cli, copyConfig cp
 		preArchive = archive.RebaseArchiveEntries(content, srcBase, srcInfo.RebaseName)
 	}
 
-
 	res := archive.CopyTo(preArchive, srcInfo, dstPath)
-	if res != nil {
-		return err
+
+
+	if dstPath[len(dstPath)-1] == '.' {
+		pathDst = dstPath[:len(dstPath)-1]+strings.Split(srcPath, "/")[len(strings.Split(srcPath, "/"))-1]
+	} else {
+		pathDst = dstPath+strings.Split(srcPath, "/")[len(strings.Split(srcPath, "/"))-1]
 	}
 
-	
-	fmt.Println(100," bytes copied")
+	if !IsStdin {
+		if !stat.Mode.IsDir() {
+			copySize, err = getFileSize(pathDst)
+		} else {
+			copySize, err = getDirectorySize(pathDst)
+		}
+		fmt.Println(bytefmt.ByteSize(uint64(copySize))," bytes copied")
+	}
 
 	return res
 }
@@ -264,9 +274,9 @@ func copyToContainer(ctx context.Context, dockerCli command.Cli, copyConfig cpCo
 		}
 
 		if !srcInfo.IsDir {
-			copySize, err = getFileSize(srcInfo)
+			copySize, err = getFileSize(srcInfo.Path)
 		} else {
-			copySize, err = getDirectorySize(srcInfo)
+			copySize, err = getDirectorySize(srcInfo.Path)
 		}
 
 		srcArchive, err := archive.TarResource(srcInfo)
@@ -345,9 +355,9 @@ func splitCpArg(arg string) (container, path string) {
 	return parts[0], parts[1]
 }
 
-func getDirectorySize(data archive.CopyInfo) (int64, error) {
+func getDirectorySize(path string) (int64, error) {
     var size int64
-    err := filepath.Walk(data.Path, func(_ string, info os.FileInfo, err error) error {
+    err := filepath.Walk(path, func(_ string, info os.FileInfo, err error) error {
         if err != nil {
             return err
         }
@@ -359,8 +369,8 @@ func getDirectorySize(data archive.CopyInfo) (int64, error) {
     return size, err
 }
 
-func getFileSize(data archive.CopyInfo) (int64, error) {
-	file, err := os.Stat(data.Path)
+func getFileSize(path string) (int64, error) {
+	file, err := os.Stat(path)
 	if err != nil {
     	return 0, err
 	}
