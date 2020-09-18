@@ -7,7 +7,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
 	"code.cloudfoundry.org/bytefmt"
 	"github.com/docker/cli/cli"
 	"github.com/docker/cli/cli/command"
@@ -264,6 +263,8 @@ func copyToContainer(ctx context.Context, dockerCli command.Cli, copyConfig cpCo
 
 		if !srcInfo.IsDir {
 			copySize, err = getFileSize(srcInfo)
+		} else {
+			copySize, err = getDirectorySize(srcInfo)
 		}
 
 		srcArchive, err := archive.TarResource(srcInfo)
@@ -341,6 +342,20 @@ func splitCpArg(arg string) (container, path string) {
 	}
 
 	return parts[0], parts[1]
+}
+
+func getDirectorySize(data archive.CopyInfo) (int64, error) {
+    var size int64
+    err := filepath.Walk(data.Path, func(_ string, info os.FileInfo, err error) error {
+        if err != nil {
+            return err
+        }
+        if !info.IsDir() {
+            size += info.Size()
+        }
+        return err
+    })
+    return size, err
 }
 
 func getFileSize(data archive.CopyInfo) (int64, error) {
