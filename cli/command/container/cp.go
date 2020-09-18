@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
-
+	"code.cloudfoundry.org/bytefmt"
 	"github.com/docker/cli/cli"
 	"github.com/docker/cli/cli/command"
 	"github.com/docker/docker/api/types"
@@ -42,11 +42,7 @@ type cpConfig struct {
 }
 
 var (
-	ticker                = time.NewTicker(400 * time.Millisecond)
-	nontick               = make(chan bool)
-	concludeCpChannel     = make(chan bool)
-	counter           int = 0
-	spinCharacters        = []string{"-", "\\", "|", "/"}
+	copySize int64 = 0
 )
 
 // NewCopyCommand creates a new `docker cp` command
@@ -187,15 +183,14 @@ func copyFromContainer(ctx context.Context, dockerCli command.Cli, copyConfig cp
 		preArchive = archive.RebaseArchiveEntries(content, srcBase, srcInfo.RebaseName)
 	}
 
-	go spinnerCopyAnim()
 
 	res := archive.CopyTo(preArchive, srcInfo, dstPath)
 	if res != nil {
 		return err
 	}
 
-	concludeCpChannel <- true
-	time.Sleep(300 * time.Millisecond)
+	
+	fmt.Println(100," bytes copied")
 
 	return res
 }
@@ -267,10 +262,17 @@ func copyToContainer(ctx context.Context, dockerCli command.Cli, copyConfig cpCo
 			return err
 		}
 
+		if !srcInfo.IsDir {
+			copySize, err = getFileSize(srcInfo)
+		}
+
 		srcArchive, err := archive.TarResource(srcInfo)
 		if err != nil {
 			return err
 		}
+		//size, srcArchive := getCopySize(srcArchive)
+
+
 		defer srcArchive.Close()
 
 		// With the stat info about the local source as well as the
@@ -300,15 +302,12 @@ func copyToContainer(ctx context.Context, dockerCli command.Cli, copyConfig cpCo
 		CopyUIDGID:                copyConfig.copyUIDGID,
 	}
 
-	go spinnerCopyAnim()
-
 	res := client.CopyToContainer(ctx, copyConfig.container, resolvedDstPath, content, options)
 	if res != nil {
 		return err
 	}
 
-	concludeCpChannel <- true
-	time.Sleep(300 * time.Millisecond)
+	fmt.Println(bytefmt.ByteSize(uint64(copySize))," copied")
 
 	return res
 }
@@ -344,26 +343,10 @@ func splitCpArg(arg string) (container, path string) {
 	return parts[0], parts[1]
 }
 
-func spinnerCopyAnim() {
-	fmt.Print("\033[s")
-	fmt.Printf("%s Copying...", spinCharacters[0])
-	for {
-		select {
-		case <-nontick:
-			return
-		case <-ticker.C:
-			counter++
-			fmt.Print("\033[u\033[K")
-			fmt.Printf("%s Copying...", spinCharacters[counter])
-			if counter == 3 {
-				counter = -1
-			}
-
-		case <-concludeCpChannel:
-			ticker.Stop()
-			fmt.Print("\033[u\033[K")
-			fmt.Print("\u2713 Copying...")
-			fmt.Println()
-		}
+func getFileSize(data archive.CopyInfo) (int64, error) {
+	file, err := os.Stat(data.Path)
+	if err != nil {
+    	return 0, err
 	}
+	return file.Size(), nil
 }
