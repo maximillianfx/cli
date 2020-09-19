@@ -41,10 +41,10 @@ type cpConfig struct {
 }
 
 var (
-	copySize int64  = 0
-	isStdin  bool   = false
-	pathDst  string = ""
-	errorFileSize error = nil
+	copySize      int64  = 0
+	isStdin       bool   = false
+	pathDst       string = ""
+	errorFileSize error  = nil
 )
 
 // NewCopyCommand creates a new `docker cp` command
