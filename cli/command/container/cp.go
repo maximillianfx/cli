@@ -3,6 +3,11 @@ package container
 import (
 	"context"
 	"fmt"
+	"io"
+	"os"
+	"path/filepath"
+	"strings"
+
 	"github.com/docker/cli/cli"
 	"github.com/docker/cli/cli/command"
 	"github.com/docker/docker/api/types"
@@ -10,10 +15,6 @@ import (
 	"github.com/docker/docker/pkg/system"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
-	"io"
-	"os"
-	"path/filepath"
-	"strings"
 )
 
 type copyOptions struct {
@@ -43,6 +44,7 @@ var (
 	copySize int64  = 0
 	isStdin  bool   = false
 	pathDst  string = ""
+	errorFileSize error = nil
 )
 
 // NewCopyCommand creates a new `docker cp` command
@@ -193,9 +195,9 @@ func copyFromContainer(ctx context.Context, dockerCli command.Cli, copyConfig cp
 
 	if !isStdin {
 		if !stat.Mode.IsDir() {
-			copySize, err = getFileSize(pathDst)
+			copySize, errorFileSize = getFileSize(pathDst)
 		} else {
-			copySize, err = getDirectorySize(pathDst)
+			copySize, errorFileSize = getDirectorySize(pathDst)
 		}
 		fmt.Println(copySize, " bytes copied")
 	}
@@ -272,11 +274,11 @@ func copyToContainer(ctx context.Context, dockerCli command.Cli, copyConfig cpCo
 		}
 
 		if !srcInfo.IsDir {
-			copySize, err = getFileSize(srcInfo.Path)
+			copySize, errorFileSize = getFileSize(srcInfo.Path)
 			if err != nil
 				return err
 		} else {
-			copySize, err = getDirectorySize(srcInfo.Path)
+			copySize, errorFileSize = getDirectorySize(srcInfo.Path)
 			if err != nil
 				return err
 		}
