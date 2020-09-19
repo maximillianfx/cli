@@ -275,12 +275,12 @@ func copyToContainer(ctx context.Context, dockerCli command.Cli, copyConfig cpCo
 
 		if !srcInfo.IsDir {
 			copySize, errorFileSize = getFileSize(srcInfo.Path)
-			if err != nil
-				return err
+			if errorFileSize != nil
+				return errorFileSize
 		} else {
 			copySize, errorFileSize = getDirectorySize(srcInfo.Path)
-			if err != nil
-				return err
+			if errorFileSize != nil
+				return errorFileSize
 		}
 
 		srcArchive, err := archive.TarResource(srcInfo)
