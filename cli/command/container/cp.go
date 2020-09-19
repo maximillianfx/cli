@@ -41,7 +41,7 @@ type cpConfig struct {
 
 var (
 	copySize int64  = 0
-	IsStdin  bool   = false
+	isStdin  bool   = false
 	pathDst  string = ""
 )
 
@@ -191,7 +191,7 @@ func copyFromContainer(ctx context.Context, dockerCli command.Cli, copyConfig cp
 		pathDst = dstPath + strings.Split(srcPath, "/")[len(strings.Split(srcPath, "/"))-1]
 	}
 
-	if !IsStdin {
+	if !isStdin {
 		if !stat.Mode.IsDir() {
 			copySize, err = getFileSize(pathDst)
 		} else {
@@ -260,7 +260,7 @@ func copyToContainer(ctx context.Context, dockerCli command.Cli, copyConfig cpCo
 	if srcPath == "-" {
 		content = os.Stdin
 		resolvedDstPath = dstInfo.Path
-		IsStdin = true
+		isStdin = true
 		if !dstInfo.IsDir {
 			return errors.Errorf("destination \"%s:%s\" must be a directory", copyConfig.container, dstPath)
 		}
@@ -273,8 +273,12 @@ func copyToContainer(ctx context.Context, dockerCli command.Cli, copyConfig cpCo
 
 		if !srcInfo.IsDir {
 			copySize, err = getFileSize(srcInfo.Path)
+			if err != nil
+				return err
 		} else {
 			copySize, err = getDirectorySize(srcInfo.Path)
+			if err != nil
+				return err
 		}
 
 		srcArchive, err := archive.TarResource(srcInfo)
@@ -314,7 +318,7 @@ func copyToContainer(ctx context.Context, dockerCli command.Cli, copyConfig cpCo
 
 	res := client.CopyToContainer(ctx, copyConfig.container, resolvedDstPath, content, options)
 
-	if !IsStdin {
+	if !isStdin {
 		fmt.Println(copySize, " bytes copied")
 	}
 
