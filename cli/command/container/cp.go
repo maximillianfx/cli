@@ -1,13 +1,9 @@
 package container
 
 import (
+	"code.cloudfoundry.org/bytefmt"
 	"context"
 	"fmt"
-	"io"
-	"os"
-	"path/filepath"
-	"strings"
-	"code.cloudfoundry.org/bytefmt"
 	"github.com/docker/cli/cli"
 	"github.com/docker/cli/cli/command"
 	"github.com/docker/docker/api/types"
@@ -15,6 +11,10 @@ import (
 	"github.com/docker/docker/pkg/system"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
+	"io"
+	"os"
+	"path/filepath"
+	"strings"
 )
 
 type copyOptions struct {
@@ -41,9 +41,9 @@ type cpConfig struct {
 }
 
 var (
-	copySize int64 = 0
-	IsStdin bool = false
-	pathDst string = ""
+	copySize int64  = 0
+	IsStdin  bool   = false
+	pathDst  string = ""
 )
 
 // NewCopyCommand creates a new `docker cp` command
@@ -186,11 +186,10 @@ func copyFromContainer(ctx context.Context, dockerCli command.Cli, copyConfig cp
 
 	res := archive.CopyTo(preArchive, srcInfo, dstPath)
 
-
 	if dstPath[len(dstPath)-1] == '.' {
-		pathDst = dstPath[:len(dstPath)-1]+strings.Split(srcPath, "/")[len(strings.Split(srcPath, "/"))-1]
+		pathDst = dstPath[:len(dstPath)-1] + strings.Split(srcPath, "/")[len(strings.Split(srcPath, "/"))-1]
 	} else {
-		pathDst = dstPath+strings.Split(srcPath, "/")[len(strings.Split(srcPath, "/"))-1]
+		pathDst = dstPath + strings.Split(srcPath, "/")[len(strings.Split(srcPath, "/"))-1]
 	}
 
 	if !IsStdin {
@@ -199,7 +198,7 @@ func copyFromContainer(ctx context.Context, dockerCli command.Cli, copyConfig cp
 		} else {
 			copySize, err = getDirectorySize(pathDst)
 		}
-		fmt.Println(bytefmt.ByteSize(uint64(copySize))," bytes copied")
+		fmt.Println(bytefmt.ByteSize(uint64(copySize)), " bytes copied")
 	}
 
 	return res
@@ -285,7 +284,6 @@ func copyToContainer(ctx context.Context, dockerCli command.Cli, copyConfig cpCo
 		}
 		//size, srcArchive := getCopySize(srcArchive)
 
-
 		defer srcArchive.Close()
 
 		// With the stat info about the local source as well as the
@@ -316,9 +314,9 @@ func copyToContainer(ctx context.Context, dockerCli command.Cli, copyConfig cpCo
 	}
 
 	res := client.CopyToContainer(ctx, copyConfig.container, resolvedDstPath, content, options)
-	
+
 	if !IsStdin {
-		fmt.Println(bytefmt.ByteSize(uint64(copySize))," copied")
+		fmt.Println(bytefmt.ByteSize(uint64(copySize)), " copied")
 	}
 
 	return res
@@ -356,23 +354,23 @@ func splitCpArg(arg string) (container, path string) {
 }
 
 func getDirectorySize(path string) (int64, error) {
-    var size int64
-    err := filepath.Walk(path, func(_ string, info os.FileInfo, err error) error {
-        if err != nil {
-            return err
-        }
-        if !info.IsDir() {
-            size += info.Size()
-        }
-        return err
-    })
-    return size, err
+	var size int64
+	err := filepath.Walk(path, func(_ string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if !info.IsDir() {
+			size += info.Size()
+		}
+		return err
+	})
+	return size, err
 }
 
 func getFileSize(path string) (int64, error) {
 	file, err := os.Stat(path)
 	if err != nil {
-    	return 0, err
+		return 0, err
 	}
 	return file.Size(), nil
 }
