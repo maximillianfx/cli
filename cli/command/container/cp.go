@@ -1,7 +1,6 @@
 package container
 
 import (
-	"code.cloudfoundry.org/bytefmt"
 	"context"
 	"fmt"
 	"github.com/docker/cli/cli"
@@ -198,7 +197,7 @@ func copyFromContainer(ctx context.Context, dockerCli command.Cli, copyConfig cp
 		} else {
 			copySize, err = getDirectorySize(pathDst)
 		}
-		fmt.Println(bytefmt.ByteSize(uint64(copySize)), " bytes copied")
+		fmt.Println(copySize, " bytes copied")
 	}
 
 	return res
@@ -316,7 +315,7 @@ func copyToContainer(ctx context.Context, dockerCli command.Cli, copyConfig cpCo
 	res := client.CopyToContainer(ctx, copyConfig.container, resolvedDstPath, content, options)
 
 	if !IsStdin {
-		fmt.Println(bytefmt.ByteSize(uint64(copySize)), " copied")
+		fmt.Println(copySize, " bytes copied")
 	}
 
 	return res
