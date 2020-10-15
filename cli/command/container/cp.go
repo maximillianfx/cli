@@ -40,12 +40,28 @@ type cpConfig struct {
 	container  string
 }
 
+type CopyReader struct {
+	io.Reader
+	total int64
+}
+
 var (
 	copySize      int64  = 0
 	isStdin       bool   = false
 	pathDst       string = ""
 	errorFileSize error  = nil
 )
+
+func (pt *CopyReader) Read(p []byte) (int, error) {
+	n, err := pt.Reader.Read(p)
+	pt.total += int64(n)
+
+	if err == nil {
+		fmt.Println("Read", n, "bytes for a total of", pt.total)
+	}
+
+	return n, err
+}
 
 // NewCopyCommand creates a new `docker cp` command
 func NewCopyCommand(dockerCli command.Cli) *cobra.Command {
@@ -273,15 +289,15 @@ func copyToContainer(ctx context.Context, dockerCli command.Cli, copyConfig cpCo
 			return err
 		}
 
-		if !srcInfo.IsDir {
-			copySize, errorFileSize = getFileSize(srcInfo.Path)
-		} else {
-			copySize, errorFileSize = getDirectorySize(srcInfo.Path)
-		}
+		//if !srcInfo.IsDir {
+		//	copySize, errorFileSize = getFileSize(srcInfo.Path)
+		//} else {
+		//	copySize, errorFileSize = getDirectorySize(srcInfo.Path)
+		//}
 
-		if errorFileSize != nil {
-			return errorFileSize
-		}
+		//if errorFileSize != nil {
+		//	return errorFileSize
+		//}
 
 		srcArchive, err := archive.TarResource(srcInfo)
 		if err != nil {
@@ -311,6 +327,7 @@ func copyToContainer(ctx context.Context, dockerCli command.Cli, copyConfig cpCo
 
 		resolvedDstPath = dstDir
 		content = preparedArchive
+		content = &PassThru{Reader: content}
 	}
 
 	options := types.CopyToContainerOptions{
