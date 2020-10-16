@@ -42,24 +42,24 @@ type cpConfig struct {
 	container  string
 }
 
-//Wrapper to content when it is a Reader
+//CopyReader is a Wrapper to content when it is a Reader
 type CopyReader struct {
 	io.Reader
 	total int64
 }
 
-//Wrapper to content when it is a ReadCloser
+//CopyReadCloser is a Wrapper to content when it is a ReadCloser
 type CopyReadCloser struct {
 	io.ReadCloser
 	total int64
 }
 
 var (
-	copySize      int64  = 0
+	copySize int64 = 0
 	//isStdin       bool   = false
 	//pathDst       string = ""
 	//errorFileSize error  = nil
-	arrowLoading  string = "[__________]"
+	arrowLoading string = "[__________]"
 )
 
 func updateArrowLoading(value float64) {
