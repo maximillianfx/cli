@@ -61,7 +61,7 @@ var (
 )
 
 func updateArrowLoading(value float64) {
-	division := int(value)/10
+	division := int(value) / 10
 	newArrow := "["
 	i := 0
 	j := 0
@@ -93,7 +93,7 @@ func (pt *CopyReader) Read(p []byte) (int, error) {
 
 	percent := float64(pt.total) / float64(copySize)
 
-	updateArrowLoading(percent*100)
+	updateArrowLoading(percent * 100)
 
 	if err == nil {
 		fmt.Print("\033[u\033[K")
@@ -109,7 +109,7 @@ func (pt *CopyReadCloser) Read(p []byte) (int, error) {
 
 	percent := float64(pt.total) / float64(copySize)
 
-	updateArrowLoading(percent*100)
+	updateArrowLoading(percent * 100)
 
 	if err == nil {
 		fmt.Print("\033[u\033[K")
