@@ -42,11 +42,13 @@ type cpConfig struct {
 	container  string
 }
 
+//Wrapper to content when it is a Reader
 type CopyReader struct {
 	io.Reader
 	total int64
 }
 
+//Wrapper to content when it is a ReadCloser
 type CopyReadCloser struct {
 	io.ReadCloser
 	total int64
@@ -54,9 +56,9 @@ type CopyReadCloser struct {
 
 var (
 	copySize      int64  = 0
-	isStdin       bool   = false
-	pathDst       string = ""
-	errorFileSize error  = nil
+	//isStdin       bool   = false
+	//pathDst       string = ""
+	//errorFileSize error  = nil
 	arrowLoading  string = "[__________]"
 )
 
@@ -68,17 +70,17 @@ func updateArrowLoading(value float64) {
 
 	for i < division {
 		newArrow += "="
-		i += 1
+		i++
 	}
 
 	if i > 0 && i < 10 {
 		newArrow += ">"
-		i += 1
+		i++
 	}
 
 	for j < 10-i {
 		newArrow += "_"
-		j += 1
+		j++
 	}
 
 	newArrow += "]"
@@ -341,7 +343,7 @@ func copyToContainer(ctx context.Context, dockerCli command.Cli, copyConfig cpCo
 	if srcPath == "-" {
 		content = os.Stdin
 		resolvedDstPath = dstInfo.Path
-		isStdin = true
+		//isStdin = true
 		if !dstInfo.IsDir {
 			return errors.Errorf("destination \"%s:%s\" must be a directory", copyConfig.container, dstPath)
 		}
