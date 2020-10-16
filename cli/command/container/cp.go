@@ -1,9 +1,11 @@
 package container
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strings"
@@ -45,19 +47,73 @@ type CopyReader struct {
 	total int64
 }
 
+type CopyReadCloser struct {
+	io.ReadCloser
+	total int64
+}
+
 var (
 	copySize      int64  = 0
 	isStdin       bool   = false
 	pathDst       string = ""
 	errorFileSize error  = nil
+	arrowLoading  string = "[__________]"
 )
+
+func updateArrowLoading(value float64) {
+	division := int(value)/10
+	newArrow := "["
+	i := 0
+	j := 0
+
+	for i < division {
+		newArrow += "="
+		i += 1
+	}
+
+	if i > 0 && i < 10 {
+		newArrow += ">"
+		i += 1
+	}
+
+	for j < 10-i {
+		newArrow += "_"
+		j += 1
+	}
+
+	newArrow += "]"
+
+	arrowLoading = newArrow
+
+}
 
 func (pt *CopyReader) Read(p []byte) (int, error) {
 	n, err := pt.Reader.Read(p)
 	pt.total += int64(n)
 
+	percent := float64(pt.total) / float64(copySize)
+
+	updateArrowLoading(percent*100)
+
 	if err == nil {
-		fmt.Println("Read", n, "bytes for a total of", pt.total)
+		fmt.Print("\033[u\033[K")
+		fmt.Printf("%s", arrowLoading)
+	}
+
+	return n, err
+}
+
+func (pt *CopyReadCloser) Read(p []byte) (int, error) {
+	n, err := pt.ReadCloser.Read(p)
+	pt.total += int64(n)
+
+	percent := float64(pt.total) / float64(copySize)
+
+	updateArrowLoading(percent*100)
+
+	if err == nil {
+		fmt.Print("\033[u\033[K")
+		fmt.Printf("%s", arrowLoading)
 	}
 
 	return n, err
@@ -195,15 +251,22 @@ func copyFromContainer(ctx context.Context, dockerCli command.Cli, copyConfig cp
 		RebaseName: rebaseName,
 	}
 
+	copySize, content = getSizeReadCloser(content)
+	content = &CopyReadCloser{ReadCloser: content}
 	preArchive := content
 	if len(srcInfo.RebaseName) != 0 {
 		_, srcBase := archive.SplitPathDirEntry(srcInfo.Path)
 		preArchive = archive.RebaseArchiveEntries(content, srcBase, srcInfo.RebaseName)
 	}
 
+	fmt.Println("Copying", copySize, "bytes")
+	fmt.Print("\033[s")
 	res := archive.CopyTo(preArchive, srcInfo, dstPath)
 
-	if dstPath[len(dstPath)-1] == '.' {
+	fmt.Println()
+	fmt.Println("Successfully copied!")
+
+	/*if dstPath[len(dstPath)-1] == '.' {
 		pathDst = dstPath[:len(dstPath)-1] + strings.Split(srcPath, "/")[len(strings.Split(srcPath, "/"))-1]
 	} else {
 		pathDst = dstPath + strings.Split(srcPath, "/")[len(strings.Split(srcPath, "/"))-1]
@@ -216,7 +279,7 @@ func copyFromContainer(ctx context.Context, dockerCli command.Cli, copyConfig cp
 			copySize, errorFileSize = getDirectorySize(pathDst)
 		}
 		fmt.Println(copySize, " bytes copied")
-	}
+	}*/
 
 	return res
 }
@@ -327,19 +390,24 @@ func copyToContainer(ctx context.Context, dockerCli command.Cli, copyConfig cpCo
 
 		resolvedDstPath = dstDir
 		content = preparedArchive
-		content = &PassThru{Reader: content}
+		copySize, content = getSize(content)
+		content = &CopyReader{Reader: content}
 	}
 
 	options := types.CopyToContainerOptions{
 		AllowOverwriteDirWithFile: false,
 		CopyUIDGID:                copyConfig.copyUIDGID,
 	}
+	fmt.Println("Copying", copySize, "bytes")
+	fmt.Print("\033[s")
 
 	res := client.CopyToContainer(ctx, copyConfig.container, resolvedDstPath, content, options)
+	fmt.Println()
+	fmt.Println("Successfully copied!")
 
-	if !isStdin {
-		fmt.Println(copySize, " bytes copied")
-	}
+	//if !isStdin {
+	//	fmt.Println(copySize, " bytes copied")
+	//}
 
 	return res
 }
@@ -375,7 +443,7 @@ func splitCpArg(arg string) (container, path string) {
 	return parts[0], parts[1]
 }
 
-func getDirectorySize(path string) (int64, error) {
+/*func getDirectorySize(path string) (int64, error) {
 	var size int64
 	err := filepath.Walk(path, func(_ string, info os.FileInfo, err error) error {
 		if err != nil {
@@ -395,4 +463,22 @@ func getFileSize(path string) (int64, error) {
 		return 0, err
 	}
 	return file.Size(), nil
+}*/
+
+func getSize(data io.Reader) (int64, io.Reader) {
+	buf := &bytes.Buffer{}
+	nRead, err := io.Copy(buf, data)
+	if err != nil {
+		fmt.Println(err)
+	}
+	return nRead, buf
+}
+
+func getSizeReadCloser(data io.ReadCloser) (int64, io.ReadCloser) {
+	buf := &bytes.Buffer{}
+	nRead, err := io.Copy(buf, data)
+	if err != nil {
+		fmt.Println(err)
+	}
+	return nRead, ioutil.NopCloser(buf)
 }
