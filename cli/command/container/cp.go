@@ -15,6 +15,7 @@ import (
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/pkg/archive"
 	"github.com/docker/docker/pkg/system"
+	units "github.com/docker/go-units"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 )
@@ -59,7 +60,9 @@ var (
 	//isStdin       bool   = false
 	//pathDst       string = ""
 	//errorFileSize error  = nil
-	arrowLoading string = "[__________]"
+	containerName string = ""
+	copyPath      string = ""
+	arrowLoading  string = "[__________]"
 )
 
 func updateArrowLoading(value float64) {
@@ -99,7 +102,7 @@ func (pt *CopyReader) Read(p []byte) (int, error) {
 
 	if err == nil {
 		fmt.Print("\033[u\033[K")
-		fmt.Printf("%s", arrowLoading)
+		fmt.Printf("%s:%s - Copying %s %s/%s", containerName, copyPath, arrowLoading, units.HumanSize(float64(pt.total)), units.HumanSize(float64(copySize)))
 	}
 
 	return n, err
@@ -115,7 +118,7 @@ func (pt *CopyReadCloser) Read(p []byte) (int, error) {
 
 	if err == nil {
 		fmt.Print("\033[u\033[K")
-		fmt.Printf("%s", arrowLoading)
+		fmt.Printf("host:%s - Copying %s %s/%s", copyPath, arrowLoading, units.HumanSize(float64(pt.total)), units.HumanSize(float64(copySize)))
 	}
 
 	return n, err
@@ -261,12 +264,21 @@ func copyFromContainer(ctx context.Context, dockerCli command.Cli, copyConfig cp
 		preArchive = archive.RebaseArchiveEntries(content, srcBase, srcInfo.RebaseName)
 	}
 
-	fmt.Println("Copying", copySize, "bytes")
+	containerName = copyConfig.container
+	copyPath = dstPath
+	fileOrFolderName := ""
+	if srcInfo.IsDir {
+		fileOrFolderName = strings.Split(srcPath, "/")[len(strings.Split(srcPath, "/"))-2]
+	} else {
+		fileOrFolderName = strings.Split(srcPath, "/")[len(strings.Split(srcPath, "/"))-1]
+	}
+
+	fmt.Println("Copying " + fileOrFolderName + " (" + units.HumanSize(float64(copySize)) + ") into host:" + copyPath + "...")
 	fmt.Print("\033[s")
 	res := archive.CopyTo(preArchive, srcInfo, dstPath)
 
 	fmt.Println()
-	fmt.Println("Successfully copied!")
+	fmt.Println("Status: " + fileOrFolderName + " copied to host at " + copyPath)
 
 	/*if dstPath[len(dstPath)-1] == '.' {
 		pathDst = dstPath[:len(dstPath)-1] + strings.Split(srcPath, "/")[len(strings.Split(srcPath, "/"))-1]
@@ -396,16 +408,27 @@ func copyToContainer(ctx context.Context, dockerCli command.Cli, copyConfig cpCo
 		content = &CopyReader{Reader: content}
 	}
 
+	//AQUI ESTA O PATH DE DESTINO DA COPIA INTO CONTAINER
+	containerName = copyConfig.container
+	copyPath = dstInfo.Path
+
 	options := types.CopyToContainerOptions{
 		AllowOverwriteDirWithFile: false,
 		CopyUIDGID:                copyConfig.copyUIDGID,
 	}
-	fmt.Println("Copying", copySize, "bytes")
+	fileOrFolderName := ""
+	if dstInfo.IsDir {
+		fileOrFolderName = strings.Split(srcPath, "/")[len(strings.Split(srcPath, "/"))-2]
+	} else {
+		fileOrFolderName = strings.Split(srcPath, "/")[len(strings.Split(srcPath, "/"))-1]
+	}
+
+	fmt.Println("Copying " + fileOrFolderName + " (" + units.HumanSize(float64(copySize)) + ") into " + containerName + ":" + copyPath + "...")
 	fmt.Print("\033[s")
 
 	res := client.CopyToContainer(ctx, copyConfig.container, resolvedDstPath, content, options)
 	fmt.Println()
-	fmt.Println("Successfully copied!")
+	fmt.Println("Status: " + fileOrFolderName + " copied to container " + containerName + " at " + copyPath)
 
 	//if !isStdin {
 	//	fmt.Println(copySize, " bytes copied")
