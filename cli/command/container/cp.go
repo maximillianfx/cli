@@ -267,7 +267,7 @@ func copyFromContainer(ctx context.Context, dockerCli command.Cli, copyConfig cp
 	containerName = copyConfig.container
 	copyPath = dstPath
 	fileOrFolderName := ""
-	if srcInfo.IsDir {
+	if strings.Split(srcPath, "/")[len(strings.Split(srcPath, "/"))-1] == "" {
 		fileOrFolderName = strings.Split(srcPath, "/")[len(strings.Split(srcPath, "/"))-2]
 	} else {
 		fileOrFolderName = strings.Split(srcPath, "/")[len(strings.Split(srcPath, "/"))-1]
@@ -416,8 +416,9 @@ func copyToContainer(ctx context.Context, dockerCli command.Cli, copyConfig cpCo
 		AllowOverwriteDirWithFile: false,
 		CopyUIDGID:                copyConfig.copyUIDGID,
 	}
+
 	fileOrFolderName := ""
-	if dstInfo.IsDir {
+	if strings.Split(srcPath, "/")[len(strings.Split(srcPath, "/"))-1] == "" {
 		fileOrFolderName = strings.Split(srcPath, "/")[len(strings.Split(srcPath, "/"))-2]
 	} else {
 		fileOrFolderName = strings.Split(srcPath, "/")[len(strings.Split(srcPath, "/"))-1]
