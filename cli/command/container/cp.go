@@ -25,6 +25,7 @@ type copyOptions struct {
 	destination string
 	followLink  bool
 	copyUIDGID  bool
+	quiet       bool
 }
 
 type copyDirection int
@@ -38,6 +39,7 @@ const (
 type cpConfig struct {
 	followLink bool
 	copyUIDGID bool
+	quiet      bool
 	sourcePath string
 	destPath   string
 	container  string
@@ -56,10 +58,11 @@ type CopyReadCloser struct {
 }
 
 var (
-	copySize int64 = 0
+	copySize      int64  = 0
 	containerName string = ""
 	copyPath      string = ""
 	arrowLoading  string = "[__________]"
+	quiet         bool   = false
 )
 
 func updateArrowLoading(value float64) {
@@ -97,9 +100,9 @@ func (pt *CopyReader) Read(p []byte) (int, error) {
 
 	updateArrowLoading(percent * 100)
 
-	if err == nil {
+	if err == nil && !quiet {
 		fmt.Print("\033[u\033[K")
-		fmt.Printf("Copying to container %s %s/%s",  arrowLoading, units.HumanSize(float64(pt.total)), units.HumanSize(float64(copySize)))
+		fmt.Printf("Copying to container %s %s/%s", arrowLoading, units.HumanSize(float64(pt.total)), units.HumanSize(float64(copySize)))
 	}
 
 	return n, err
@@ -113,7 +116,7 @@ func (pt *CopyReadCloser) Read(p []byte) (int, error) {
 
 	updateArrowLoading(percent * 100)
 
-	if err == nil {
+	if err == nil && !quiet {
 		fmt.Print("\033[u\033[K")
 		fmt.Printf("Copying from container %s %s/%s", arrowLoading, units.HumanSize(float64(pt.total)), units.HumanSize(float64(copySize)))
 	}
@@ -153,6 +156,7 @@ func NewCopyCommand(dockerCli command.Cli) *cobra.Command {
 	flags := cmd.Flags()
 	flags.BoolVarP(&opts.followLink, "follow-link", "L", false, "Always follow symbol link in SRC_PATH")
 	flags.BoolVarP(&opts.copyUIDGID, "archive", "a", false, "Archive mode (copy all uid/gid information)")
+	flags.BoolVarP(&opts.quiet, "quiet", "q", false, "Does not display copying process")
 	return cmd
 }
 
@@ -163,6 +167,7 @@ func runCopy(dockerCli command.Cli, opts copyOptions) error {
 	copyConfig := cpConfig{
 		followLink: opts.followLink,
 		copyUIDGID: opts.copyUIDGID,
+		quiet:      opts.quiet,
 		sourcePath: srcPath,
 		destPath:   destPath,
 	}
@@ -263,13 +268,19 @@ func copyFromContainer(ctx context.Context, dockerCli command.Cli, copyConfig cp
 
 	containerName = copyConfig.container
 	copyPath = dstPath
+	quiet = copyConfig.quiet
 
-	fmt.Println("Preparing to copy...")
-	fmt.Print("\033[s")
+	if !copyConfig.quiet {
+		fmt.Println("Preparing to copy...")
+		fmt.Print("\033[s")
+	}
+
 	res := archive.CopyTo(preArchive, srcInfo, dstPath)
 
-	fmt.Println()
-	fmt.Println("Successfully copied " + units.HumanSize(float64(copySize)) + " to " + copyPath)
+	if !copyConfig.quiet {
+		fmt.Println()
+		fmt.Println("Successfully copied " + units.HumanSize(float64(copySize)) + " to " + copyPath)
+	}
 
 	return res
 }
@@ -380,12 +391,19 @@ func copyToContainer(ctx context.Context, dockerCli command.Cli, copyConfig cpCo
 		CopyUIDGID:                copyConfig.copyUIDGID,
 	}
 
-	fmt.Println("Preparing to copy...")
-	fmt.Print("\033[s")
+	quiet = copyConfig.quiet
+
+	if !copyConfig.quiet {
+		fmt.Println("Preparing to copy...")
+		fmt.Print("\033[s")
+	}
 
 	res := client.CopyToContainer(ctx, copyConfig.container, resolvedDstPath, content, options)
-	fmt.Println()
-	fmt.Println("Successfully copied " + units.HumanSize(float64(copySize)) + " to " + containerName + ":" + copyPath)
+
+	if !copyConfig.quiet {
+		fmt.Println()
+		fmt.Println("Successfully copied " + units.HumanSize(float64(copySize)) + " to " + containerName + ":" + copyPath)
+	}
 
 	return res
 }
