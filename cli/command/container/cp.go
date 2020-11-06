@@ -99,7 +99,7 @@ func (pt *CopyReader) Read(p []byte) (int, error) {
 
 	if err == nil {
 		fmt.Print("\033[u\033[K")
-		fmt.Printf("%s:%s - Copying %s %s/%s", containerName, copyPath, arrowLoading, units.HumanSize(float64(pt.total)), units.HumanSize(float64(copySize)))
+		fmt.Printf("Copying to container %s %s/%s",  arrowLoading, units.HumanSize(float64(pt.total)), units.HumanSize(float64(copySize)))
 	}
 
 	return n, err
@@ -115,7 +115,7 @@ func (pt *CopyReadCloser) Read(p []byte) (int, error) {
 
 	if err == nil {
 		fmt.Print("\033[u\033[K")
-		fmt.Printf("host:%s - Copying %s %s/%s", copyPath, arrowLoading, units.HumanSize(float64(pt.total)), units.HumanSize(float64(copySize)))
+		fmt.Printf("Copying from container %s %s/%s", arrowLoading, units.HumanSize(float64(pt.total)), units.HumanSize(float64(copySize)))
 	}
 
 	return n, err
@@ -263,19 +263,13 @@ func copyFromContainer(ctx context.Context, dockerCli command.Cli, copyConfig cp
 
 	containerName = copyConfig.container
 	copyPath = dstPath
-	fileOrFolderName := ""
-	if strings.Split(srcPath, "/")[len(strings.Split(srcPath, "/"))-1] == "" {
-		fileOrFolderName = strings.Split(srcPath, "/")[len(strings.Split(srcPath, "/"))-2]
-	} else {
-		fileOrFolderName = strings.Split(srcPath, "/")[len(strings.Split(srcPath, "/"))-1]
-	}
 
-	fmt.Println("Copying " + fileOrFolderName + " (" + units.HumanSize(float64(copySize)) + ") into host:" + copyPath + "...")
+	fmt.Println("Preparing to copy...")
 	fmt.Print("\033[s")
 	res := archive.CopyTo(preArchive, srcInfo, dstPath)
 
 	fmt.Println()
-	fmt.Println("Status: " + fileOrFolderName + " copied to host at " + copyPath)
+	fmt.Println("Successfully copied " + units.HumanSize(float64(copySize)) + " to " + copyPath)
 
 	return res
 }
@@ -386,19 +380,12 @@ func copyToContainer(ctx context.Context, dockerCli command.Cli, copyConfig cpCo
 		CopyUIDGID:                copyConfig.copyUIDGID,
 	}
 
-	fileOrFolderName := ""
-	if strings.Split(srcPath, "/")[len(strings.Split(srcPath, "/"))-1] == "" {
-		fileOrFolderName = strings.Split(srcPath, "/")[len(strings.Split(srcPath, "/"))-2]
-	} else {
-		fileOrFolderName = strings.Split(srcPath, "/")[len(strings.Split(srcPath, "/"))-1]
-	}
-
-	fmt.Println("Copying " + fileOrFolderName + " (" + units.HumanSize(float64(copySize)) + ") into " + containerName + ":" + copyPath + "...")
+	fmt.Println("Preparing to copy...")
 	fmt.Print("\033[s")
 
 	res := client.CopyToContainer(ctx, copyConfig.container, resolvedDstPath, content, options)
 	fmt.Println()
-	fmt.Println("Status: " + fileOrFolderName + " copied to container " + containerName + " at " + copyPath)
+	fmt.Println("Successfully copied " + units.HumanSize(float64(copySize)) + " to " + containerName + ":" + copyPath)
 
 	return res
 }
