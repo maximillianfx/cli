@@ -45,14 +45,14 @@ type cpConfig struct {
 	container  string
 }
 
-//CopyReader is a Wrapper to content when it is a Reader
-type CopyReader struct {
+//copyReader is a Wrapper to content when it is a Reader
+type copyReader struct {
 	io.Reader
 	total int64
 }
 
-//CopyReadCloser is a Wrapper to content when it is a ReadCloser
-type CopyReadCloser struct {
+//copyReadCloser is a Wrapper to content when it is a ReadCloser
+type copyReadCloser struct {
 	io.ReadCloser
 	total int64
 }
@@ -92,7 +92,7 @@ func updateArrowLoading(value float64) {
 
 }
 
-func (pt *CopyReader) Read(p []byte) (int, error) {
+func (pt *copyReader) Read(p []byte) (int, error) {
 	n, err := pt.Reader.Read(p)
 	pt.total += int64(n)
 
@@ -108,7 +108,7 @@ func (pt *CopyReader) Read(p []byte) (int, error) {
 	return n, err
 }
 
-func (pt *CopyReadCloser) Read(p []byte) (int, error) {
+func (pt *copyReadCloser) Read(p []byte) (int, error) {
 	n, err := pt.ReadCloser.Read(p)
 	pt.total += int64(n)
 
@@ -259,7 +259,7 @@ func copyFromContainer(ctx context.Context, dockerCli command.Cli, copyConfig cp
 	}
 
 	copySize, content = getSizeReadCloser(content)
-	content = &CopyReadCloser{ReadCloser: content}
+	content = &copyReadCloser{ReadCloser: content}
 	preArchive := content
 	if len(srcInfo.RebaseName) != 0 {
 		_, srcBase := archive.SplitPathDirEntry(srcInfo.Path)
@@ -380,7 +380,7 @@ func copyToContainer(ctx context.Context, dockerCli command.Cli, copyConfig cpCo
 		resolvedDstPath = dstDir
 		content = preparedArchive
 		copySize, content = getSize(content)
-		content = &CopyReader{Reader: content}
+		content = &copyReader{Reader: content}
 	}
 
 	containerName = copyConfig.container
