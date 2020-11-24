@@ -53,7 +53,6 @@ type copyReader struct {
 	copySize      int64
 	containerName string
 	copyPath      string
-	arrowLoading  string
 	quiet         bool
 }
 
