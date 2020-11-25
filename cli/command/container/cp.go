@@ -45,8 +45,11 @@ type cpConfig struct {
 	container  string
 }
 
-//copyReader is a Wrapper to content
-type copyReader struct {
+//cpWithProgress is a Wrapper to the content being copied from or to container. This wrapper
+//contains information about the file or folder being copied (size and bytes - ReadCloser) as well as
+//source and destination path. When the bytes are copied, the `Read` method from io.ReadCloser is overwritten
+//showing the progress during the copy.
+type cpWithProgress struct {
 	io.ReadCloser
 	toContainer   bool
 	total         int64
@@ -54,6 +57,7 @@ type copyReader struct {
 	containerName string
 	copyPath      string
 	quiet         bool
+	dockerCli     command.Cli
 }
 
 func updateArrowLoading(value float64) string {
@@ -83,7 +87,7 @@ func updateArrowLoading(value float64) string {
 
 }
 
-func (pt *copyReader) Read(p []byte) (int, error) {
+func (pt *cpWithProgress) Read(p []byte) (int, error) {
 	n, err := pt.ReadCloser.Read(p)
 	pt.total += int64(n)
 
@@ -92,11 +96,11 @@ func (pt *copyReader) Read(p []byte) (int, error) {
 	arrow := updateArrowLoading(percent * 100)
 
 	if err == nil && !pt.quiet {
-		fmt.Print("\033[u\033[K")
+		fmt.Fprint(pt.dockerCli.Out(), "\033[u\033[K")
 		if pt.toContainer {
-			fmt.Printf("Copying to container %s %s/%s", arrow, units.HumanSize(float64(pt.total)), units.HumanSize(float64(pt.copySize)))
+			fmt.Fprint(pt.dockerCli.Out(), "Copying to container "+arrow+" "+units.HumanSize(float64(pt.total))+"/"+units.HumanSize(float64(pt.copySize)))
 		} else {
-			fmt.Printf("Copying from container %s %s/%s", arrow, units.HumanSize(float64(pt.total)), units.HumanSize(float64(pt.copySize)))
+			fmt.Fprint(pt.dockerCli.Out(), "Copying from container "+arrow+" "+units.HumanSize(float64(pt.total))+"/"+units.HumanSize(float64(pt.copySize)))
 		}
 	}
 
@@ -239,7 +243,7 @@ func copyFromContainer(ctx context.Context, dockerCli command.Cli, copyConfig cp
 
 	var copySize int64
 	copySize, content = getSizeReadCloser(content)
-	content = &copyReader{ReadCloser: content, toContainer: false, containerName: copyConfig.container, copyPath: dstPath, quiet: copyConfig.quiet, copySize: copySize}
+	content = &cpWithProgress{ReadCloser: content, toContainer: false, containerName: copyConfig.container, copyPath: dstPath, quiet: copyConfig.quiet, copySize: copySize, dockerCli: dockerCli}
 
 	preArchive := content
 
@@ -249,15 +253,15 @@ func copyFromContainer(ctx context.Context, dockerCli command.Cli, copyConfig cp
 	}
 
 	if !copyConfig.quiet {
-		fmt.Println("Preparing to copy...")
-		fmt.Print("\033[s")
+		fmt.Fprint(dockerCli.Out(), "Preparing to copy...\n")
+		fmt.Fprint(dockerCli.Out(), "\033[s")
 	}
 
 	res := archive.CopyTo(preArchive, srcInfo, dstPath)
 
 	if !copyConfig.quiet {
-		fmt.Println()
-		fmt.Println("Successfully copied " + units.HumanSize(float64(copySize)) + " to " + dstPath)
+		fmt.Fprint(dockerCli.Out(), "\n")
+		fmt.Fprint(dockerCli.Out(), "Successfully copied ", units.HumanSize(float64(copySize)), " to ", dstPath, "\n")
 	}
 
 	return res
@@ -359,7 +363,7 @@ func copyToContainer(ctx context.Context, dockerCli command.Cli, copyConfig cpCo
 		resolvedDstPath = dstDir
 		content = preparedArchive
 		copySize, content = getSize(content)
-		content = &copyReader{ReadCloser: content, toContainer: true, containerName: copyConfig.container, copyPath: dstInfo.Path, quiet: copyConfig.quiet, copySize: copySize}
+		content = &cpWithProgress{ReadCloser: content, toContainer: true, containerName: copyConfig.container, copyPath: dstInfo.Path, quiet: copyConfig.quiet, copySize: copySize, dockerCli: dockerCli}
 	}
 
 	options := types.CopyToContainerOptions{
@@ -368,15 +372,15 @@ func copyToContainer(ctx context.Context, dockerCli command.Cli, copyConfig cpCo
 	}
 
 	if !copyConfig.quiet {
-		fmt.Println("Preparing to copy...")
-		fmt.Print("\033[s")
+		fmt.Fprint(dockerCli.Out(), "Preparing to copy...\n")
+		fmt.Fprint(dockerCli.Out(), "\033[s")
 	}
 
 	res := client.CopyToContainer(ctx, copyConfig.container, resolvedDstPath, content, options)
 
 	if !copyConfig.quiet {
-		fmt.Println()
-		fmt.Println("Successfully copied " + units.HumanSize(float64(copySize)) + " to " + copyConfig.container + ":" + dstInfo.Path)
+		fmt.Fprint(dockerCli.Out(), "\n")
+		fmt.Fprint(dockerCli.Out(), "Successfully copied ", units.HumanSize(float64(copySize)), " to ", copyConfig.container, ":", dstInfo.Path, "\n")
 	}
 
 	return res
