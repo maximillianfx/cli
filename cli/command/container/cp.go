@@ -1,11 +1,9 @@
 package container
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strings"
@@ -52,55 +50,23 @@ type cpConfig struct {
 type cpWithProgress struct {
 	io.ReadCloser
 	toContainer   bool
-	total         int64
-	copySize      int64
+	total         *int64
 	containerName string
 	copyPath      string
 	quiet         bool
-	dockerCli     command.Cli
-}
-
-func updateArrowLoading(value float64) string {
-	division := int(value) / 10
-	newArrow := "["
-	i := 0
-	j := 0
-
-	for i < division {
-		newArrow += "="
-		i++
-	}
-
-	if i > 0 && i < 10 {
-		newArrow += ">"
-		i++
-	}
-
-	for j < 10-i {
-		newArrow += "_"
-		j++
-	}
-
-	newArrow += "]"
-
-	return newArrow
-
+	writer        io.Writer
 }
 
 func (pt *cpWithProgress) Read(p []byte) (int, error) {
 	n, err := pt.ReadCloser.Read(p)
-	pt.total += int64(n)
-
-	percent := float64(pt.total) / float64(pt.copySize)
-
-	arrow := updateArrowLoading(percent * 100)
+	*pt.total += int64(n)
 
 	if err == nil && !pt.quiet {
-		fmt.Fprint(pt.dockerCli.Out(), "\033[u\033[K")
+		fmt.Fprint(pt.writer, "\033[u\033[K")
 		if pt.toContainer {
-			fmt.Fprint(pt.dockerCli.Out(), "Copying to container "+arrow+" "+units.HumanSize(float64(pt.total))+"/"+units.HumanSize(float64(pt.copySize)))
+			fmt.Fprint(pt.writer, "Copying to container - "+units.HumanSize(float64(*pt.total)))
 		} else {
-			fmt.Fprint(pt.dockerCli.Out(), "Copying from container "+arrow+" "+units.HumanSize(float64(pt.total))+"/"+units.HumanSize(float64(pt.copySize)))
+			fmt.Fprint(pt.writer, "Copying from container - "+units.HumanSize(float64(*pt.total)))
 		}
 	}
 
@@ -241,9 +207,8 @@ func copyFromContainer(ctx context.Context, dockerCli command.Cli, copyConfig cp
 		RebaseName: rebaseName,
 	}
 
-	var copySize int64
-	copySize, content = getSizeReadCloser(content)
-	content = &cpWithProgress{ReadCloser: content, toContainer: false, containerName: copyConfig.container, copyPath: dstPath, quiet: copyConfig.quiet, copySize: copySize, dockerCli: dockerCli}
+	var copiedSize int64
+	content = &cpWithProgress{ReadCloser: content, toContainer: false, containerName: copyConfig.container, copyPath: dstPath, quiet: copyConfig.quiet, writer: dockerCli.Out(), total: &copiedSize}
 
 	preArchive := content
 
@@ -261,7 +226,7 @@ func copyFromContainer(ctx context.Context, dockerCli command.Cli, copyConfig cp
 
 	if !copyConfig.quiet {
 		fmt.Fprint(dockerCli.Out(), "\n")
-		fmt.Fprint(dockerCli.Out(), "Successfully copied ", units.HumanSize(float64(copySize)), " to ", dstPath, "\n")
+		fmt.Fprint(dockerCli.Out(), "Successfully copied ", units.HumanSize(float64(copiedSize)), " to ", dstPath, "\n")
 	}
 
 	return res
@@ -319,7 +284,7 @@ func copyToContainer(ctx context.Context, dockerCli command.Cli, copyConfig cpCo
 	var (
 		content         io.ReadCloser
 		resolvedDstPath string
-		copySize        int64
+		copiedSize      int64
 	)
 
 	if srcPath == "-" {
@@ -362,8 +327,7 @@ func copyToContainer(ctx context.Context, dockerCli command.Cli, copyConfig cpCo
 
 		resolvedDstPath = dstDir
 		content = preparedArchive
-		copySize, content = getSize(content)
-		content = &cpWithProgress{ReadCloser: content, toContainer: true, containerName: copyConfig.container, copyPath: dstInfo.Path, quiet: copyConfig.quiet, copySize: copySize, dockerCli: dockerCli}
+		content = &cpWithProgress{ReadCloser: content, toContainer: true, containerName: copyConfig.container, copyPath: dstInfo.Path, quiet: copyConfig.quiet, writer: dockerCli.Out(), total: &copiedSize}
 	}
 
 	options := types.CopyToContainerOptions{
@@ -380,7 +344,7 @@ func copyToContainer(ctx context.Context, dockerCli command.Cli, copyConfig cpCo
 
 	if !copyConfig.quiet {
 		fmt.Fprint(dockerCli.Out(), "\n")
-		fmt.Fprint(dockerCli.Out(), "Successfully copied ", units.HumanSize(float64(copySize)), " to ", copyConfig.container, ":", dstInfo.Path, "\n")
+		fmt.Fprint(dockerCli.Out(), "Successfully copied ", units.HumanSize(float64(copiedSize)), " to ", copyConfig.container, ":", dstInfo.Path, "\n")
 	}
 
 	return res
@@ -415,22 +379,4 @@ func splitCpArg(arg string) (container, path string) {
 	}
 
 	return parts[0], parts[1]
-}
-
-func getSize(data io.Reader) (int64, io.ReadCloser) {
-	buf := &bytes.Buffer{}
-	nRead, err := io.Copy(buf, data)
-	if err != nil {
-		fmt.Println(err)
-	}
-	return nRead, ioutil.NopCloser(buf)
-}
-
-func getSizeReadCloser(data io.ReadCloser) (int64, io.ReadCloser) {
-	buf := &bytes.Buffer{}
-	nRead, err := io.Copy(buf, data)
-	if err != nil {
-		fmt.Println(err)
-	}
-	return nRead, ioutil.NopCloser(buf)
 }
