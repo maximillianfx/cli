@@ -102,10 +102,12 @@ func NewCopyCommand(dockerCli command.Cli) *cobra.Command {
 		},
 	}
 
+	fileInfo, _ := os.Stdin.Stat()
+
 	flags := cmd.Flags()
 	flags.BoolVarP(&opts.followLink, "follow-link", "L", false, "Always follow symbol link in SRC_PATH")
 	flags.BoolVarP(&opts.copyUIDGID, "archive", "a", false, "Archive mode (copy all uid/gid information)")
-	flags.BoolVarP(&opts.quiet, "quiet", "q", false, "Does not display copying process")
+	flags.BoolVarP(&opts.quiet, "quiet", "q", (fileInfo.Mode() & os.ModeCharDevice) == 0, "Does not display copying process")
 	return cmd
 }
 
