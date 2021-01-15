@@ -16,7 +16,7 @@ import (
 
 func TestClientDebugEnabled(t *testing.T) {
 	defer debug.Disable()
-	cli, err := command.NewDockerCli()
+	cli, _ := command.NewDockerCli()
 	tcmd := newDockerCommand(cli)
 	tcmd.SetFlag("debug", "true")
 	cmd, _, err := tcmd.HandleGlobalFlags()
