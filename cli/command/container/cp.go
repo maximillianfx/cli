@@ -14,6 +14,7 @@ import (
 	"github.com/docker/docker/pkg/archive"
 	"github.com/docker/docker/pkg/system"
 	units "github.com/docker/go-units"
+	"github.com/morikuni/aec"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 )
@@ -43,30 +44,25 @@ type cpConfig struct {
 	container  string
 }
 
-//cpWithProgress is a Wrapper to the content being copied from or to container. This wrapper
-//contains information about the file or folder being copied (size and bytes - ReadCloser) as well as
-//source and destination path. When the bytes are copied, the `Read` method from io.ReadCloser is overwritten
-//showing the progress during the copy.
-type cpWithProgress struct {
+// copyProgressPrinter wraps io.ReadCloser to print progress information when
+// copying files to/from a container.
+type copyProgressPrinter struct {
 	io.ReadCloser
-	toContainer   bool
-	total         *int64
-	containerName string
-	copyPath      string
-	quiet         bool
-	writer        io.Writer
+	toContainer bool
+	total       *float64
+	writer      io.Writer
 }
 
-func (pt *cpWithProgress) Read(p []byte) (int, error) {
+func (pt *copyProgressPrinter) Read(p []byte) (int, error) {
 	n, err := pt.ReadCloser.Read(p)
-	*pt.total += int64(n)
+	*pt.total += float64(n)
 
-	if err == nil && !pt.quiet {
-		fmt.Fprint(pt.writer, "\033[u\033[K")
+	if err == nil {
+		fmt.Fprint(pt.writer, aec.EraseLine(aec.EraseModes.All))
 		if pt.toContainer {
-			fmt.Fprint(pt.writer, "Copying to container - "+units.HumanSize(float64(*pt.total)))
+			fmt.Fprint(pt.writer, "Copying to container - "+units.HumanSize(*pt.total))
 		} else {
-			fmt.Fprint(pt.writer, "Copying from container - "+units.HumanSize(float64(*pt.total)))
+			fmt.Fprint(pt.writer, "Copying from container - "+units.HumanSize(*pt.total))
 		}
 	}
 
@@ -98,6 +94,10 @@ func NewCopyCommand(dockerCli command.Cli) *cobra.Command {
 			}
 			opts.source = args[0]
 			opts.destination = args[1]
+			if !cmd.Flag("quiet").Changed {
+				// User did not specify "quiet" flag; suppress output if no terminal is attached
+				opts.quiet = !dockerCli.Out().IsTerminal()
+			}
 			return runCopy(dockerCli, opts)
 		},
 	}
@@ -105,7 +105,7 @@ func NewCopyCommand(dockerCli command.Cli) *cobra.Command {
 	flags := cmd.Flags()
 	flags.BoolVarP(&opts.followLink, "follow-link", "L", false, "Always follow symbol link in SRC_PATH")
 	flags.BoolVarP(&opts.copyUIDGID, "archive", "a", false, "Archive mode (copy all uid/gid information)")
-	flags.BoolVarP(&opts.quiet, "quiet", "q", !dockerCli.Out().IsTerminal(), "Does not display copying process")
+	flags.BoolVarP(&opts.quiet, "quiet", "q", false, "Suppress progress output during copy. Progress output is automatically suppressed if no terminal is attached")
 	return cmd
 }
 
@@ -207,8 +207,15 @@ func copyFromContainer(ctx context.Context, dockerCli command.Cli, copyConfig cp
 		RebaseName: rebaseName,
 	}
 
-	var copiedSize int64
-	content = &cpWithProgress{ReadCloser: content, toContainer: false, containerName: copyConfig.container, copyPath: dstPath, quiet: copyConfig.quiet, writer: dockerCli.Out(), total: &copiedSize}
+	var copiedSize float64
+	if !copyConfig.quiet {
+		content = &copyProgressPrinter{
+			ReadCloser:  content,
+			toContainer: false,
+			writer:      dockerCli.Err(),
+			total:       &copiedSize,
+		}
+	}
 
 	preArchive := content
 
@@ -217,17 +224,16 @@ func copyFromContainer(ctx context.Context, dockerCli command.Cli, copyConfig cp
 		preArchive = archive.RebaseArchiveEntries(content, srcBase, srcInfo.RebaseName)
 	}
 
-	if !copyConfig.quiet {
-		fmt.Fprint(dockerCli.Out(), "Preparing to copy...\n")
-		fmt.Fprint(dockerCli.Out(), "\033[s")
+	if copyConfig.quiet {
+		return archive.CopyTo(preArchive, srcInfo, dstPath)
 	}
 
+	fmt.Fprint(dockerCli.Err(), "Preparing to copy...\n")
+	fmt.Fprint(dockerCli.Err(), aec.Save)
+	fmt.Fprint(dockerCli.Err(), aec.Up(1))
 	res := archive.CopyTo(preArchive, srcInfo, dstPath)
-
-	if !copyConfig.quiet {
-		fmt.Fprint(dockerCli.Out(), "\n")
-		fmt.Fprint(dockerCli.Out(), "Successfully copied ", units.HumanSize(float64(copiedSize)), " to ", dstPath, "\n")
-	}
+	fmt.Fprint(dockerCli.Err(), "\n")
+	fmt.Fprint(dockerCli.Err(), "Successfully copied ", units.HumanSize(copiedSize), " to ", dstPath, "\n")
 
 	return res
 }
@@ -284,7 +290,7 @@ func copyToContainer(ctx context.Context, dockerCli command.Cli, copyConfig cpCo
 	var (
 		content         io.ReadCloser
 		resolvedDstPath string
-		copiedSize      int64
+		copiedSize      float64
 	)
 
 	if srcPath == "-" {
@@ -327,7 +333,14 @@ func copyToContainer(ctx context.Context, dockerCli command.Cli, copyConfig cpCo
 
 		resolvedDstPath = dstDir
 		content = preparedArchive
-		content = &cpWithProgress{ReadCloser: content, toContainer: true, containerName: copyConfig.container, copyPath: dstInfo.Path, quiet: copyConfig.quiet, writer: dockerCli.Out(), total: &copiedSize}
+		if !copyConfig.quiet {
+			content = &copyProgressPrinter{
+				ReadCloser:  content,
+				toContainer: true,
+				writer:      dockerCli.Err(),
+				total:       &copiedSize,
+			}
+		}
 	}
 
 	options := types.CopyToContainerOptions{
@@ -336,16 +349,15 @@ func copyToContainer(ctx context.Context, dockerCli command.Cli, copyConfig cpCo
 	}
 
 	if !copyConfig.quiet {
-		fmt.Fprint(dockerCli.Out(), "Preparing to copy...\n")
-		fmt.Fprint(dockerCli.Out(), "\033[s")
+		return client.CopyToContainer(ctx, copyConfig.container, resolvedDstPath, content, options)
 	}
 
+	fmt.Fprint(dockerCli.Err(), "Preparing to copy...\n")
+	fmt.Fprint(dockerCli.Err(), "\033[s")
+	fmt.Fprint(dockerCli.Err(), aec.Up(1))
 	res := client.CopyToContainer(ctx, copyConfig.container, resolvedDstPath, content, options)
-
-	if !copyConfig.quiet {
-		fmt.Fprint(dockerCli.Out(), "\n")
-		fmt.Fprint(dockerCli.Out(), "Successfully copied ", units.HumanSize(float64(copiedSize)), " to ", copyConfig.container, ":", dstInfo.Path, "\n")
-	}
+	fmt.Fprint(dockerCli.Err(), "\n")
+	fmt.Fprint(dockerCli.Err(), "Successfully copied ", units.HumanSize(float64(copiedSize)), " to ", copyConfig.container, ":", dstInfo.Path, "\n")
 
 	return res
 }
